@@ -1,0 +1,7 @@
+name: boom-multi-chain-bridge
+description: 'Use Pulumi to deploy infrastructure supporting Boom Token’s cross-chain bridge (Base ↔ BSC), automating RPC nodes, event listeners, and relayers. Tech Stack: AWS Lambda, GCP Cloud Functions, Celer cBridge, Web3.js, Pulumi'
+runtime: nodejs
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: github-typescript
