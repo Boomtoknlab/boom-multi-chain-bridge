@@ -1,0 +1,114 @@
+name: cloudfront-s3-website
+runtime: yaml
+
+variables:
+  domainName: boombridge.com  # Custom domain for the bridge
+  githubRepo: boom-multi-chain-bridge  # GitHub repository name
+  githubToken: your-github-token  # Replace with your GitHub PAT
+
+resources:
+  siteBucket:
+    type: aws:s3:Bucket
+    properties:
+      website:
+        indexDocument: index.html
+        errorDocument: 404.html
+
+  oai:
+    type: aws:cloudfront:OriginAccessIdentity
+
+  certificate:
+    type: aws:acm:Certificate
+    properties:
+      domainName: ${domainName}
+      validationMethod: DNS
+
+  cloudfrontDistribution:
+    type: aws:cloudfront:Distribution
+    properties:
+      enabled: true
+      origins:
+        - domainName: ${siteBucket.bucketRegionalDomainName}
+          originId: ${siteBucket.arn}
+          s3OriginConfig:
+            originAccessIdentity: ${oai.cloudfrontAccessIdentityPath}
+      defaultCacheBehavior:
+        targetOriginId: ${siteBucket.arn}
+        viewerProtocolPolicy: redirect-to-https
+        allowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+        cachedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+        forwardedValues:
+          queryString: false
+          cookies:
+            forward: none
+      priceClass: PriceClass_100
+      customErrorResponses:
+        - errorCode: 404
+          responsePagePath: /404.html
+          responseCode: 404
+      restrictions:
+        geoRestriction:
+          restrictionType: none
+      viewerCertificate:
+        acmCertificateArn: ${certificate.arn}
+        sslSupportMethod: sni-only
+
+  zone:
+    type: aws:route53:Zone
+    properties:
+      name: ${domainName}
+
+  cloudfrontRecord:
+    type: aws:route53:Record
+    properties:
+      name: ${domainName}
+      zoneId: ${zone.zoneId}
+      type: A
+      aliases:
+        - name: ${cloudfrontDistribution.domainName}
+          zoneId: ${cloudfrontDistribution.hostedZoneId}
+          evaluateTargetHealth: true
+
+  bucketPolicy:
+    type: aws:s3:BucketPolicy
+    properties:
+      bucket: ${siteBucket.bucket}
+      policy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: arn:aws:s3:::${siteBucket.bucket}/*
+  
+  githubActionSecretAWSAccessKeyId:
+    type: github:ActionsSecret
+    properties:
+      repository: ${githubRepo}
+      secretName: AWS_ACCESS_KEY_ID
+      plaintextValue: ${aws:config.accessKey}
+
+  githubActionSecretAWSSecretAccessKey:
+    type: github:ActionsSecret
+    properties:
+      repository: ${githubRepo}
+      secretName: AWS_SECRET_ACCESS_KEY
+      plaintextValue: ${aws:config.secretKey}
+
+  githubActionSecretAWSRegion:
+    type: github:ActionsSecret
+    properties:
+      repository: ${githubRepo}
+      secretName: AWS_REGION
+      plaintextValue: ${aws:config.region}
+
+outputs:
+  bucketName: ${siteBucket.bucket}
+  cloudfrontUrl: ${cloudfrontDistribution.domainName}
